@@ -23,7 +23,7 @@ ENV BITCOIN_PGP_KEY 01EA5486DE18A882D4C2684590C8019E36C2E964
 RUN set -ex \
 	&& apt-get update \
 	&& DEBIAN_FRONTEND=noninteractive apt-get install -qq --no-install-recommends ca-certificates dirmngr gosu gpg wget \
-        && wget -qO bitcoin.tar.gz "$BITCOIN_URL" \
+	&& wget -qO bitcoin.tar.gz "$BITCOIN_URL" \
 	&& echo "$BITCOIN_SHA256 bitcoin.tar.gz" | sha256sum -c - \
 	&& gpg --keyserver keyserver.ubuntu.com --recv-keys "$BITCOIN_PGP_KEY" \
 	&& wget -qO bitcoin.asc "$BITCOIN_ASC_URL" \
