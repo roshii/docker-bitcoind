@@ -1,5 +1,5 @@
-FROM ubuntu:xenial
-MAINTAINER Kyle Manna <kyle@kylemanna.com>
+FROM debian:buster-slim
+MAINTAINER Simon Castano <simon@brane.cc>
 
 ARG USER_ID
 ARG GROUP_ID
