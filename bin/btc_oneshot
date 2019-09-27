@@ -5,10 +5,6 @@ set -ex
 # Generate bitcoin.conf
 btc_init
 
-if [ $# -gt 0 ]; then
-    args=("$@")
-else
-    args=("-rpcallowip=::/0")
-fi
+args=("$@")
 
 exec bitcoind "${args[@]}"
