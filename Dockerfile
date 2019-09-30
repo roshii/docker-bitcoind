@@ -1,5 +1,6 @@
 FROM debian:buster-slim
-MAINTAINER Simon Castano <simon@brane.cc>
+
+LABEL maintainer="Simon Castano <simon@brane.cc>"
 
 ARG USER_ID
 ARG GROUP_ID
