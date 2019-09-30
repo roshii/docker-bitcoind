@@ -21,9 +21,14 @@ ENV GROUP_ID ${GROUP_ID:-1000}
 RUN groupadd -g ${GROUP_ID} bitcoin \
 	&& useradd -u ${USER_ID} -g bitcoin -s /bin/bash -m -d /bitcoin bitcoin
 
+# Update and install OS utilities
 RUN set -ex \
 	&& apt-get update \
-	&& DEBIAN_FRONTEND=noninteractive apt-get install -qq --no-install-recommends apt-utils ca-certificates dirmngr gosu gpg-agent gpg wget \
+	&& DEBIAN_FRONTEND=noninteractive apt-get install \
+	apt-utils --no-install-recommends \
+	&& DEBIAN_FRONTEND=noninteractive apt-get install \
+	ca-certificates dirmngr gosu gpg-agent gpg wget \
+	--no-install-recommends \
 	&& rm -rf /var/lib/apt/lists/*
 
 # install bitcoin binaries
