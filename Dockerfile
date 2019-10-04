@@ -2,55 +2,77 @@ FROM debian:buster-slim
 
 LABEL maintainer="Simon Castano <simon@brane.cc>"
 
-ARG USER_ID
-ARG GROUP_ID
+ARG VERSION
+ARG DEBIAN_FRONTEND=noninteractive
 
-ENV BITCOIN_VERSION 0.18.1
-ENV BITCOIN_URL https://bitcoincore.org/bin/bitcoin-core-$BITCOIN_VERSION/bitcoin-$BITCOIN_VERSION-x86_64-linux-gnu.tar.gz
-ENV BITCOIN_SHA256 600d1db5e751fa85903e935a01a74f5cc57e1e7473c15fd3e17ed21e202cfe5a
-ENV BITCOIN_ASC_URL https://bitcoincore.org/bin/bitcoin-core-$BITCOIN_VERSION/SHA256SUMS.asc
-ENV BITCOIN_PGP_KEY 01EA5486DE18A882D4C2684590C8019E36C2E964
+ENV PGP_KEY 01EA5486DE18A882D4C2684590C8019E36C2E964
 
-ENV HOME /bitcoin
+WORKDIR /tmp
 
-# add user with specified (or default) user/group ids
-ENV USER_ID ${USER_ID:-1000}
-ENV GROUP_ID ${GROUP_ID:-1000}
-
-# add our user and group first to make sure their IDs get assigned consistently, regardless of whatever dependencies get added
-RUN groupadd -g ${GROUP_ID} bitcoin \
-	&& useradd -u ${USER_ID} -g bitcoin -s /bin/bash -m -d /bitcoin bitcoin
-
-# Update and install OS utilities
 RUN set -ex \
+	# Install OS utilities
 	&& apt-get update \
-	&& DEBIAN_FRONTEND=noninteractive apt-get install \
-	apt-utils --no-install-recommends \
-	&& DEBIAN_FRONTEND=noninteractive apt-get install \
-	ca-certificates dirmngr gosu gpg-agent gpg wget \
-	--no-install-recommends \
-	&& rm -rf /var/lib/apt/lists/*
+	&& apt-get install --no-install-recommends --no-install-suggests -y \
+	apt-utils \
+	&& apt-get install --no-install-recommends --no-install-suggests -y \
+	ca-certificates \
+	dirmngr \
+	gosu \
+	gpg-agent \
+	gpg \
+	wget \
+	# Get latest Bitcoin Core version is not set at build and set variables
+	&& if [ -z "$VERSION" ]; then \
+	VERSION=$(wget -q https://bitcoincore.org/en/releasesrss.xml -O - | grep -m1 "Bitcoin Core " | sed 's/[^0-9.]//g'); \
+	fi; \
+	FNAME="bitcoin-$VERSION-x86_64-linux-gnu.tar.gz" \
+	&& TAR_URL="https://bitcoincore.org/bin/bitcoin-core-$VERSION/$FNAME" \
+	&& ASC_URL="https://bitcoincore.org/bin/bitcoin-core-$VERSION/SHA256SUMS.asc" \
+	# Download binaries and verify checksum
+	&& wget -q $TAR_URL \
+	&& wget -q $ASC_URL \
+	&& sha256sum --ignore-missing --check SHA256SUMS.asc \
+	# Reliably fetch the PGP key and verify checksum file signature
+	&& found=''; \
+	for server in \
+	hkp://keyserver.ubuntu.com:80 \
+	ha.pool.sks-keyservers.net \
+	hkp://p80.pool.sks-keyservers.net:80 \
+	ipv4.pool.sks-keyservers.net \
+	keys.gnupg.net \
+	pgp.mit.edu \
+	; do \
+	echo "Fetching GPG key $PGP_KEY from $server"; \
+	gpg --keyserver "$server" --keyserver-options timeout=10 --recv-keys "$PGP_KEY" && found=yes && break; \
+	done; \
+	test -z "$found" && echo >&2 "error: failed to fetch PGP key $PGP_KEY" && exit 1; \
+	gpg --verify SHA256SUMS.asc \
+	# Extract Bitcoin Core binaries
+	&& tar -xzvf $FNAME -C /usr/local --strip-components=1 --exclude=*-qt \
+	# Clean
+	&& apt-get purge --auto-remove -y \
+	apt-utils \
+	ca-certificates \
+	dirmngr \
+	gpg-agent \
+	gpg \
+	wget \
+	&& apt-get clean \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& rm -rf /tmp/* \
+	# Create bitcoin user and group
+	&& groupadd bitcoin \
+	&& useradd -g bitcoin -m -d /bitcoin bitcoin
 
-# install bitcoin binaries
-RUN set -ex \
-	&& cd /tmp \
-	&& wget -qO bitcoin.tar.gz "$BITCOIN_URL" \
-	&& echo "$BITCOIN_SHA256 bitcoin.tar.gz" | sha256sum -c - \
-	&& gpg --keyserver keyserver.ubuntu.com --recv-keys "$BITCOIN_PGP_KEY" \
-	&& wget -qO bitcoin.asc "$BITCOIN_ASC_URL" \
-	&& gpg --verify bitcoin.asc \
-	&& tar -xzvf bitcoin.tar.gz -C /usr/local --strip-components=1 --exclude=*-qt \
-	&& rm -rf /tmp/*
-
-ADD ./bin /usr/local/bin
-
-VOLUME ["/bitcoin"]
+VOLUME ["/bitcoin/.bitcoin"]
 
 EXPOSE 8332 8333 18332 18333
 
 WORKDIR /bitcoin
 
-COPY docker-entrypoint.sh /usr/local/bin/
-ENTRYPOINT ["docker-entrypoint.sh"]
+# Copy startup script
+COPY entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
-CMD ["btc_oneshot"]
+ENTRYPOINT ["entrypoint.sh"]
+CMD ["bitcoind"]
